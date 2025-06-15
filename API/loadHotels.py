@@ -1,7 +1,7 @@
 import requests
-from sqlalchemy import create_engine, Column, Integer, String, Enum as SqlEnum
+from sqlalchemy import create_engine, Column, Integer, String, Enum as SqlEnum, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, relationship
 from enum import Enum
 
 # --- Define Base and DB Setup ---
@@ -13,6 +13,7 @@ SessionLocal = sessionmaker(bind=engine)
 # --- Enum for hotelClass ---
 class HotelClassEnum(str, Enum):
     chubby = "chubby"  # Placeholder for now
+    fat = "fat"
 
 # --- Define HotelDB ---
 class HotelDB(Base):
@@ -26,9 +27,19 @@ class HotelDB(Base):
     zip = Column(String, nullable=False)
     hotelClass = Column(SqlEnum(HotelClassEnum), nullable=False)
     property_token = Column(String, nullable=True)
-    image_url = Column(String, nullable=True)
 
-# --- Create table ---
+    images = relationship("HotelImage", back_populates="hotel", cascade="all, delete-orphan")
+
+# --- Define HotelImage ---
+class HotelImage(Base):
+    __tablename__ = "hotel_images"
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    hotel_id = Column(Integer, ForeignKey("hotels.id"), nullable=False)
+    image_url = Column(String, nullable=False)
+
+    hotel = relationship("HotelDB", back_populates="images")
+
+# --- Create tables ---
 Base.metadata.create_all(bind=engine)
 
 # --- Fetch hotels from SerpAPI ---
@@ -40,7 +51,7 @@ def fetch_hotels():
         "check_in_date": "2025-08-16",
         "check_out_date": "2025-08-17",
         "hotel_class": "5",
-        "api_key": "",
+        "api_key": "",  # <-- insert your API key here
         "rating": "9"
     }
 
@@ -48,6 +59,7 @@ def fetch_hotels():
     response.raise_for_status()
     return response.json()
 
+# --- Save hotels and all images to DB ---
 def save_hotels_to_db(data):
     properties = data.get("properties", [])
     session = SessionLocal()
@@ -66,9 +78,6 @@ def save_hotels_to_db(data):
         else:
             continue
 
-        images = prop.get("images", [])
-        image_url = images[0].get("original_image") if images else None
-
         hotel = HotelDB(
             name=prop.get("name", "Unknown"),
             description=prop.get("description", "No description"),
@@ -78,8 +87,14 @@ def save_hotels_to_db(data):
             zip="00000",
             hotelClass=hotel_class,
             property_token=prop.get("property_token"),
-            image_url=image_url
         )
+
+        images = prop.get("images", [])
+        for img in images:
+            url = img.get("original_image")
+            if url:
+                hotel.images.append(HotelImage(image_url=url))
+
         session.add(hotel)
 
     session.commit()
