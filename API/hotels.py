@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 from typing import List
 from sqlalchemy import Column, Integer, String, create_engine, Enum as SqlEnum
@@ -21,7 +21,7 @@ class HotelClassEnum(enum.Enum):
 # ---------- SQLAlchemy Model ----------
 class HotelDB(Base):
     __tablename__ = "hotels"
-    id = Column(Integer, primary_key=True, index=True,autoincrement=True)
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     name = Column(String, index=True, nullable=False)
     description = Column(String, index=True, nullable=False)
     address = Column(String, nullable=False)
@@ -29,6 +29,8 @@ class HotelDB(Base):
     city = Column(String, nullable=False)
     zip = Column(String, nullable=False)
     hotelClass = Column(SqlEnum(HotelClassEnum), nullable=False)
+    property_token = Column(String, nullable=True)
+    image_url = Column(String, nullable=True)
 
 Base.metadata.create_all(bind=engine)
 
@@ -42,6 +44,8 @@ class Hotel(BaseModel):
     city: str
     zip: str
     hotelClass: HotelClassEnum
+    property_token: Optional[str]
+    image_url: Optional[str]
 
     class Config:
         orm_mode = True
@@ -54,6 +58,8 @@ class CreateHotel(BaseModel):
     city: str
     zip: str
     hotelClass: HotelClassEnum
+    property_token: Optional[str]
+    image_url: Optional[str]
 
     class Config:
         orm_mode = True
@@ -62,18 +68,29 @@ class CreateHotel(BaseModel):
 app = FastAPI()
 
 # ---------- Routes ----------
+
 @app.get("/hotels", response_model=List[Hotel])
-def get_hotels(hotel_id: Optional[int] = None):
+def get_hotels(
+    hotel_id: Optional[int] = None,
+    location: Optional[str] = Query(None, description="City or country name")
+):
     with SessionLocal() as session:
         if hotel_id is not None:
             hotel = session.query(HotelDB).filter(HotelDB.id == hotel_id).first()
             if not hotel:
                 raise HTTPException(status_code=404, detail="Hotel not found")
             return [hotel]
-        else:
-            hotels = session.query(HotelDB).all()
-            return hotels
 
+        query = session.query(HotelDB)
+        if location:
+            hotels = query.filter(
+                (HotelDB.city.ilike(f"%{location}%")) |
+                (HotelDB.country.ilike(f"%{location}%"))
+            ).all()
+        else:
+            hotels = query.all()
+
+        return hotels
 
 @app.post("/hotels", response_model=Hotel)
 def create_hotel(hotel: CreateHotel):

@@ -25,6 +25,8 @@ class HotelDB(Base):
     city = Column(String, nullable=False)
     zip = Column(String, nullable=False)
     hotelClass = Column(SqlEnum(HotelClassEnum), nullable=False)
+    property_token = Column(String, nullable=True)
+    image_url = Column(String, nullable=True)
 
 # --- Create table ---
 Base.metadata.create_all(bind=engine)
@@ -38,7 +40,8 @@ def fetch_hotels():
         "check_in_date": "2025-08-16",
         "check_out_date": "2025-08-17",
         "hotel_class": "5",
-        "api_key": API_KEY
+        "api_key": "",
+        "rating": "9"
     }
 
     response = requests.get(url, params=params)
@@ -53,17 +56,18 @@ def save_hotels_to_db(data):
         rate_info = prop.get("total_rate", {})
         rate = rate_info.get("extracted_lowest")
 
-        # Skip if rate is missing
         if rate is None:
             continue
 
-        # Determine hotelClass
         if 500 <= rate < 2000:
             hotel_class = HotelClassEnum.chubby
         elif rate >= 2000:
             hotel_class = HotelClassEnum.fat
         else:
-            continue  # skip hotels with too low a rate
+            continue
+
+        images = prop.get("images", [])
+        image_url = images[0].get("original_image") if images else None
 
         hotel = HotelDB(
             name=prop.get("name", "Unknown"),
@@ -72,7 +76,9 @@ def save_hotels_to_db(data):
             country="USA",
             city="Chicago",
             zip="00000",
-            hotelClass=hotel_class
+            hotelClass=hotel_class,
+            property_token=prop.get("property_token"),
+            image_url=image_url
         )
         session.add(hotel)
 
