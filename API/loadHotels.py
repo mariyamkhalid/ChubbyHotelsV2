@@ -100,7 +100,35 @@ def save_hotels_to_db(data):
     session.commit()
     session.close()
 
+# --- Remove broken image URLs from DB ---
+def clean_broken_images():
+    session = SessionLocal()
+    all_images = session.query(HotelImage).all()
+    removed_count = 0
+
+    for image in all_images:
+        try:
+            response = requests.head(image.image_url, timeout=5)
+            if response.status_code >= 400:
+                session.delete(image)
+                removed_count += 1
+        except Exception:
+            session.delete(image)
+            removed_count += 1
+
+    session.commit()
+    session.close()
+    print(f"Removed {removed_count} broken images.")
+
 # --- Run ---
 if __name__ == "__main__":
-    data = fetch_hotels()
-    save_hotels_to_db(data)
+    choice = input("Enter 'fetch' to fetch and save hotels, 'clean' to remove broken images: ").strip().lower()
+
+    if choice == "fetch":
+        data = fetch_hotels()
+        save_hotels_to_db(data)
+        print("Hotel data saved.")
+    elif choice == "clean":
+        clean_broken_images()
+    else:
+        print("Invalid choice. Please enter 'fetch' or 'clean'.")
