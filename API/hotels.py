@@ -24,9 +24,12 @@ class HotelDB(Base):
     name = Column(String, index=True, nullable=False)
     description = Column(String, index=True, nullable=False)
     address = Column(String, nullable=False)
-    country = Column(String, nullable=False)
-    city = Column(String, nullable=False)
-    zip = Column(String, nullable=False)
+    country = Column(String, nullable=True)
+    city = Column(String, nullable=True)
+    state = Column(String, nullable=True)
+    province = Column(String, nullable=True)
+    zip = Column(String, nullable=True)
+    continent = Column(String, nullable=True)
     hotelClass = Column(SqlEnum(HotelClassEnum), nullable=False)
     property_token = Column(String, nullable=True)
 
@@ -54,9 +57,12 @@ class Hotel(BaseModel):
     name: str
     description: str
     address: str
-    country: str
-    city: str
-    zip: str
+    country: Optional[str]
+    city: Optional[str]
+    zip: Optional[str]
+    state: Optional[str]
+    province: Optional[str]
+    continent: Optional[str]
     hotelClass: HotelClassEnum
     property_token: Optional[str]
     images: List[HotelImage] = []
@@ -64,19 +70,6 @@ class Hotel(BaseModel):
     class Config:
         orm_mode = True
 
-class CreateHotel(BaseModel):
-    name: str
-    description: str
-    address: str
-    country: str
-    city: str
-    zip: str
-    hotelClass: HotelClassEnum
-    property_token: Optional[str]
-    images: List[str] = []  # list of image URLs
-
-    class Config:
-        orm_mode = True
 
 # ---------- FastAPI App ----------
 app = FastAPI()
