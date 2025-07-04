@@ -139,7 +139,7 @@ def save_hotels_to_db(properties):
             session.close()
 
 def reverse_geocode(lat, lng):
-    api_key = "" 
+    api_key = " 
     url = f"https://api.opencagedata.com/geocode/v1/json?q={lat}+{lng}&key={api_key}"
     try:
         response = requests.get(url, timeout=10)
