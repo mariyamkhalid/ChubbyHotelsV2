@@ -8,6 +8,13 @@ Base.metadata.create_all(bind=engine)
 
 # ---------- FastAPI App ----------
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],      # allow all domains
+    allow_credentials=True,   # allow cookies and auth headers
+    allow_methods=["*"],      # allow all HTTP methods
+    allow_headers=["*"],      # allow all headers
+)
 # ---------- Routes ----------
 
 @app.get("/hotels", response_model=List[Hotel])
@@ -91,7 +98,7 @@ def get_reviews_by_hotel(hotel_id: int):
             joinedload(ReviewDB.hotel),
             joinedload(ReviewDB.images)
         ).filter(ReviewDB.hotel_id == hotel_id).all()
-        
+
         return reviews
 
 @app.get("/reviews/user/{user_id}", response_model=List[ReviewResponse])
@@ -110,7 +117,7 @@ def get_reviews_by_user(user_id: int):
             joinedload(ReviewDB.hotel),
             joinedload(ReviewDB.images)
         ).filter(ReviewDB.user_id == user_id).all()
-        
+
         return reviews
 
 @app.post("/reviews", response_model=ReviewResponse)
@@ -131,7 +138,7 @@ async def create_review(
     # check if number of images and image types match
     if len(images) != len(image_types):
         raise HTTPException(status_code=400, detail="Number of images and image types must match")
-    
+
     with SessionLocal() as session:
         hotel = session.query(HotelDB).filter(HotelDB.id == hotel_id).first()
         if not hotel:
@@ -155,7 +162,7 @@ async def create_review(
         session.commit()
         session.refresh(db_review)
 
-        
+
         if images:
             for i, image in enumerate(images):
                 if image.filename:
@@ -176,7 +183,7 @@ async def create_review(
                     session.add(review_image)
 
             session.commit()
-            
+
 
         # Reload with relationships before session closes
         db_review_with_relations = session.query(ReviewDB).options(
