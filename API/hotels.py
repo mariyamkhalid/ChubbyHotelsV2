@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Query, Form, File, UploadFile
 from typing import List, Optional
 from sqlalchemy.orm import joinedload
 from models import Base, engine, SessionLocal, HotelClassEnum, HotelDB, HotelImageDB, Hotel, HotelImage, ReviewDB, ReviewImageDB, ReviewImageTypeEnum, ReviewResponse, ReviewCreate, UserDB, UserResponse
+from fastapi.middleware.cors import CORSMiddleware
 # ---------- Create tables ----------
 Base.metadata.create_all(bind=engine)
 
