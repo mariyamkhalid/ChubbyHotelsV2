@@ -36,7 +36,6 @@ def get_hotels(
 
         if location:
             query = query.filter(
-                (HotelDB.city.ilike(f"%{location}%")) |
                 (HotelDB.country.ilike(f"%{location}%"))
             )
 
