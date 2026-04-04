@@ -1,8 +1,10 @@
 from fastapi import FastAPI, HTTPException, Query, Form, File, UploadFile
-from typing import List, Optional
+from typing import List, Optional, Dict
 from sqlalchemy.orm import joinedload
 from models import Base, engine, SessionLocal, HotelClassEnum, HotelDB, HotelImageDB, Hotel, HotelImage, ReviewDB, ReviewImageDB, ReviewImageTypeEnum, ReviewResponse, ReviewCreate, UserDB, UserResponse
 from fastapi.middleware.cors import CORSMiddleware
+from collections import defaultdict
+
 # ---------- Create tables ----------
 Base.metadata.create_all(bind=engine)
 
@@ -222,3 +224,32 @@ def get_users(user_id: Optional[int] = None):
             return [user]
         users = session.query(UserDB).all()
         return users
+
+@app.get("/locations", response_model=Dict[str, List[str]])
+def get_locations():
+    """
+    Distinct locations from hotels: continent name → sorted list of countries.
+
+    Example: ``{"Europe": ["France", "Germany"], "Asia": ["Japan"]}``.
+    """
+    with SessionLocal() as session:
+        rows = (
+            session.query(HotelDB.continent, HotelDB.country)
+            .filter(HotelDB.country.isnot(None))
+            .filter(HotelDB.country != "")
+            .distinct()
+            .all()
+        )
+
+    by_continent: defaultdict[str, set[str]] = defaultdict(set)
+    for continent, country in rows:
+        c = country.strip()
+        if not c:
+            continue
+        key = continent.strip() if continent and continent.strip() else "Other"
+        by_continent[key].add(c)
+
+    return {
+        cont: sorted(by_continent[cont], key=str.casefold)
+        for cont in sorted(by_continent.keys(), key=str.casefold)
+    }
