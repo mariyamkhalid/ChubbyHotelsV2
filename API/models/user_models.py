@@ -6,8 +6,9 @@ from .enums import ReviewImageTypeEnum
 class UserDB(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    name = Column(String, nullable=False)
-
+    email = Column(String, nullable=False, unique=True, index=True)
+    first_name = Column(String, nullable=True)
+    last_name = Column(String, nullable=True)
     reviews = relationship("ReviewDB", back_populates="user", cascade="all, delete-orphan")
 
 class ReviewDB(Base):

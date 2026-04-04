@@ -1,12 +1,13 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 from .enums import HotelClassEnum
 
+
 class HotelImage(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     image_url: str
 
-    class Config:
-        orm_mode = True
 
 class Hotel(BaseModel):
     id: int
@@ -28,5 +29,4 @@ class Hotel(BaseModel):
     HotelType: Optional[str]
     link: Optional[str]
 
-    class Config:
-        orm_mode = True 
+    model_config = ConfigDict(from_attributes=True)

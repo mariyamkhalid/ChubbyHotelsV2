@@ -1,16 +1,17 @@
 from fastapi import FastAPI, HTTPException, Query, Form, File, UploadFile
 from typing import List, Optional, Dict
-from sqlalchemy.orm import joinedload
-from models import Base, engine, SessionLocal, HotelClassEnum, HotelDB, HotelImageDB, Hotel, HotelImage, ReviewDB, ReviewImageDB, ReviewImageTypeEnum, ReviewResponse, ReviewCreate, UserDB, UserResponse
+from sqlalchemy.orm import Session, joinedload
+from models import Base, engine, SessionLocal, HotelClassEnum, HotelDB, HotelImageDB, Hotel, HotelImage, ReviewDB, ReviewImageDB, ReviewImageTypeEnum, ReviewResponse, ReviewCreate, UserDB
 from fastapi.middleware.cors import CORSMiddleware
 from collections import defaultdict
-
+from fastapi.staticfiles import StaticFiles
 # ---------- Create tables ----------
 Base.metadata.create_all(bind=engine)
 
 
 # ---------- FastAPI App ----------
 app = FastAPI()
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],      # allow all domains
@@ -18,6 +19,28 @@ app.add_middleware(
     allow_methods=["*"],      # allow all HTTP methods
     allow_headers=["*"],      # allow all headers
 )
+
+
+def _get_or_create_user_by_email(
+    session: Session,
+    email: str,
+    first_name: Optional[str],
+    last_name: Optional[str],
+) -> UserDB:
+    email_clean = email.strip()
+    if not email_clean:
+        raise HTTPException(status_code=400, detail="Email is required")
+    user = session.query(UserDB).filter(UserDB.email == email_clean).first()
+    if user:
+        return user
+    fn = (first_name or "").strip() or None
+    ln = (last_name or "").strip() or None
+    user = UserDB(email=email_clean, first_name=fn, last_name=ln)
+    session.add(user)
+    session.flush()
+    return user
+
+
 # ---------- Routes ----------
 
 @app.get("/hotels", response_model=List[Hotel])
@@ -41,16 +64,6 @@ def get_hotels(
 
         hotels = query.all()
         return hotels
-
-@app.delete("/hotels", response_model=Hotel)
-def delete_hotel(hotel_id: int):
-    with SessionLocal() as session:
-        hotel = session.query(HotelDB).filter(HotelDB.id == hotel_id).first()
-        if not hotel:
-            raise HTTPException(status_code=404, detail="Hotel not found")
-        session.delete(hotel)
-        session.commit()
-        return hotel
 
 
 @app.get("/reviews", response_model=List[ReviewResponse])
@@ -103,42 +116,27 @@ def get_reviews_by_hotel(hotel_id: int):
 
         return reviews
 
-@app.get("/reviews/user/{user_id}", response_model=List[ReviewResponse])
-def get_reviews_by_user(user_id: int):
-    """
-    Get all reviews by a specific user
-    """
-    with SessionLocal() as session:
-        # First check if user exists
-        user = session.query(UserDB).filter(UserDB.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        reviews = session.query(ReviewDB).options(
-            joinedload(ReviewDB.user),
-            joinedload(ReviewDB.hotel),
-            joinedload(ReviewDB.images)
-        ).filter(ReviewDB.user_id == user_id).all()
-
-        return reviews
-
 @app.post("/reviews", response_model=ReviewResponse)
 async def create_review(
     hotel_id: int = Form(...),
-    user_id: int = Form(...),
+    email: str = Form(...),
+    first_name: Optional[str] = Form(None),
+    last_name: Optional[str] = Form(None),
     setting_review: Optional[str] = Form(None),
     room_review: Optional[str] = Form(None),
     service_review: Optional[str] = Form(None),
     food_review: Optional[str] = Form(None),
     overall_review: str = Form(...),
     image_types: Optional[List[ReviewImageTypeEnum]] = Form(None),
-    images: Optional[List[UploadFile]] = File(None)
+    images: Optional[List[UploadFile]] = File(None),
 ):
     """
-    Create a new review with optional multiple image uploads and image types.
+    Multipart only. For ``application/json`` without files, use ``POST /reviews/json``.
+    Omit ``images`` and ``image_types`` when there are no files.
     """
-    # check if number of images and image types match
-    if len(images) != len(image_types):
+    image_list = images or []
+    type_list = image_types or []
+    if len(image_list) != len(type_list):
         raise HTTPException(status_code=400, detail="Number of images and image types must match")
 
     with SessionLocal() as session:
@@ -146,13 +144,11 @@ async def create_review(
         if not hotel:
             raise HTTPException(status_code=404, detail="Hotel not found")
 
-        user = session.query(UserDB).filter(UserDB.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+        user = _get_or_create_user_by_email(session, email, first_name, last_name)
 
         db_review = ReviewDB(
             hotel_id=hotel_id,
-            user_id=user_id,
+            user_id=user.id,
             setting_review=setting_review,
             room_review=room_review,
             service_review=service_review,
@@ -165,17 +161,17 @@ async def create_review(
         session.refresh(db_review)
 
 
-        if images:
-            for i, image in enumerate(images):
+        if image_list:
+            for i, image in enumerate(image_list):
                 if image.filename:
                     image_data = await image.read()
                     image_path = f"uploads/reviews/{db_review.id}_{i}_{image.filename}"
                     with open(image_path, "wb") as f:
                         f.write(image_data)
 
-                    image_type = ReviewImageTypeEnum.overall  # default
-                    if image_types and i < len(image_types) and image_types[i] in ReviewImageTypeEnum:
-                        image_type = image_types[i]
+                    image_type = ReviewImageTypeEnum.overall
+                    if i < len(type_list) and type_list[i] in ReviewImageTypeEnum:
+                        image_type = type_list[i]
 
                     review_image = ReviewImageDB(
                         review_id=db_review.id,
@@ -187,7 +183,6 @@ async def create_review(
             session.commit()
 
 
-        # Reload with relationships before session closes
         db_review_with_relations = session.query(ReviewDB).options(
             joinedload(ReviewDB.user),
             joinedload(ReviewDB.hotel),
@@ -196,33 +191,48 @@ async def create_review(
 
         return db_review_with_relations
 
-# ---------- User Endpoints ----------
 
-@app.post("/users", response_model=UserResponse)
-def create_user(name: str):
+@app.post("/reviews/json", response_model=ReviewResponse)
+def create_review_json(body: ReviewCreate):
     """
-    Create a new user
+    JSON body (no images). In Swagger, JSON requests use **one** editor for the
+    whole object—not separate boxes per field like multipart ``/reviews``.
+    Open **Schema** below the editor to see each property and types.
     """
     with SessionLocal() as session:
-        user = UserDB(name=name)
-        session.add(user)
+        hotel = session.query(HotelDB).filter(HotelDB.id == body.hotel_id).first()
+        if not hotel:
+            raise HTTPException(status_code=404, detail="Hotel not found")
+
+        user = _get_or_create_user_by_email(
+            session, body.email, body.first_name, body.last_name
+        )
+
+        db_review = ReviewDB(
+            hotel_id=body.hotel_id,
+            user_id=user.id,
+            setting_review=body.setting_review,
+            room_review=body.room_review,
+            service_review=body.service_review,
+            food_review=body.food_review,
+            overall_review=body.overall_review,
+        )
+        session.add(db_review)
         session.commit()
-        session.refresh(user)
-        return user
+        session.refresh(db_review)
 
-@app.get("/users", response_model=List[UserResponse])
-def get_users(user_id: Optional[int] = None):
-    """
-    Get all users or a specific user by ID
-    """
-    with SessionLocal() as session:
-        if user_id is not None:
-            user = session.query(UserDB).filter(UserDB.id == user_id).first()
-            if not user:
-                raise HTTPException(status_code=404, detail="User not found")
-            return [user]
-        users = session.query(UserDB).all()
-        return users
+        return (
+            session.query(ReviewDB)
+            .options(
+                joinedload(ReviewDB.user),
+                joinedload(ReviewDB.hotel),
+                joinedload(ReviewDB.images),
+            )
+            .filter(ReviewDB.id == db_review.id)
+            .first()
+        )
+
+# ---------- User Endpoints ----------
 
 @app.get("/locations", response_model=Dict[str, List[str]])
 def get_locations():
