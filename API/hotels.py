@@ -1,7 +1,10 @@
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException, Query, Form, File, UploadFile
 from typing import List, Optional, Dict
 from sqlalchemy.orm import Session, joinedload
-from models import Base, engine, SessionLocal, HotelClassEnum, HotelDB, HotelImageDB, Hotel, HotelImage, ReviewDB, ReviewImageDB, ReviewImageTypeEnum, ReviewResponse, ReviewCreate, UserDB
+
+from models import Base, engine, SessionLocal, HotelClassEnum, HotelDB, HotelImageDB, Hotel, ReviewDB, ReviewImageDB, ReviewImageTypeEnum, ReviewResponse, ReviewCreate, UserDB
 from fastapi.middleware.cors import CORSMiddleware
 from collections import defaultdict
 from fastapi.staticfiles import StaticFiles
@@ -64,6 +67,64 @@ def get_hotels(
 
         hotels = query.all()
         return hotels
+
+
+@app.post("/hotels", response_model=Hotel)
+async def create_hotel(
+    name: str = Form(...),
+    description: str = Form(...),
+    location: str = Form(...),
+    email: str = Form(...),
+    first_name: Optional[str] = Form(None),
+    last_name: Optional[str] = Form(None),
+    images: Optional[List[UploadFile]] = File(None),
+):
+    """
+    Submit a new hotel (multipart). User is matched or created by email.
+    Starts inactive (is_active=false) until approved; address mirrors location for legacy schema.
+    Optional ``images``: repeat the field for multiple files (omit when none).
+    """
+    loc = location.strip()
+    if not loc:
+        raise HTTPException(status_code=400, detail="location is required")
+
+    image_list = [f for f in (images or []) if getattr(f, "filename", None)]
+    uploads_dir = Path("uploads/hotels")
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+
+    with SessionLocal() as session:
+        user = _get_or_create_user_by_email(session, email, first_name, last_name)
+        hotel_row = HotelDB(
+            name=name.strip(),
+            description=description.strip(),
+            location=loc,
+            address=loc,
+            hotelClass=HotelClassEnum.chubby,
+            rate=0,
+            is_active=False,
+            owner_id=user.id,
+        )
+        session.add(hotel_row)
+        session.commit()
+        session.refresh(hotel_row)
+
+        for i, image in enumerate(image_list):
+            raw = await image.read()
+            rel_path = f"uploads/hotels/{hotel_row.id}_{i}_{image.filename}"
+            Path(rel_path).write_bytes(raw)
+            session.add(HotelImageDB(hotel_id=hotel_row.id, image_url=rel_path))
+        if image_list:
+            session.commit()
+
+        out = (
+            session.query(HotelDB)
+            .options(joinedload(HotelDB.images))
+            .filter(HotelDB.id == hotel_row.id)
+            .first()
+        )
+        if not out:
+            raise HTTPException(status_code=500, detail="Hotel not found after create")
+        return out
 
 
 @app.get("/reviews", response_model=List[ReviewResponse])

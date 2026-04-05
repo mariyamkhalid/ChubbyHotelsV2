@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String,Float, Enum as SqlEnum, ForeignKey
+from sqlalchemy import Boolean, Column, Integer, String, Float, Enum as SqlEnum, ForeignKey
 from sqlalchemy.orm import relationship
 from .database import Base
 from .enums import HotelClassEnum
@@ -8,6 +8,7 @@ class HotelDB(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     name = Column(String, index=True, nullable=False)
     description = Column(String, index=True, nullable=False)
+    location = Column(String, nullable=True)
     address = Column(String, nullable=False)
     country = Column(String, nullable=True)
     city = Column(String, nullable=True)
@@ -22,6 +23,8 @@ class HotelDB(Base):
     location_rating = Column(Float, nullable=True)
     HotelType = Column(String, nullable=True)
     link = Column(String, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     images = relationship("HotelImageDB", back_populates="hotel", cascade="all, delete-orphan")
     reviews = relationship("ReviewDB", back_populates="hotel", cascade="all, delete-orphan")

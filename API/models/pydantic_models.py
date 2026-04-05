@@ -13,6 +13,7 @@ class Hotel(BaseModel):
     id: int
     name: str
     description: str
+    location: Optional[str] = None
     address: str
     country: Optional[str]
     city: Optional[str]
@@ -28,5 +29,7 @@ class Hotel(BaseModel):
     location_rating: Optional[float]
     HotelType: Optional[str]
     link: Optional[str]
+    is_active: bool = True
+    owner_id: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
