@@ -34,4 +34,5 @@ class HotelImageDB(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     hotel_id = Column(Integer, ForeignKey("hotels.id"), nullable=False)
     image_url = Column(String, nullable=False)
+    s3_url = Column(String, nullable=True)
     hotel = relationship("HotelDB", back_populates="images")
