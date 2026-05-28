@@ -10,15 +10,15 @@ def fetch_hotels_paginated(search_term: str, max_hotels=3000):
     url = "https://serpapi.com/search"
     all_properties = []
     next_page_token = None
-    api_key = ""
+    api_key = "b29cd99c67fa1e6d828738ba6337b839a0b079e23532a6eaff6229991daad2f9"
 
     while len(all_properties) < max_hotels:
         print ("loading properties")
         params = {
             "engine": "google_hotels",
             "q": search_term,
-            "check_in_date": "2025-10-16",
-            "check_out_date": "2025-10-17",
+            "check_in_date": "2026-06-04",
+            "check_out_date": "2026-06-05",
             "hotel_class": "5",
             "rating": "9",
             "api_key": api_key
@@ -56,8 +56,10 @@ def save_hotels_to_db(properties):
                 continue
 
             if 500 <= rate < 2000:
+                print(prop.get("name"))
                 hotel_class = HotelClassEnum.chubby
             elif rate >= 2000:
+                print(prop.get("name"))
                 hotel_class = HotelClassEnum.fat
             else:
                 print("Skipping hotel- rate is too low")
@@ -139,7 +141,7 @@ def save_hotels_to_db(properties):
             session.close()
 
 def reverse_geocode(lat, lng):
-    api_key = " 
+    api_key = "ab1e194780eb42d5993fc9d03db97b4f"
     url = f"https://api.opencagedata.com/geocode/v1/json?q={lat}+{lng}&key={api_key}"
     try:
         response = requests.get(url, timeout=10)
